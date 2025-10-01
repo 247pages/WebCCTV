@@ -1,59 +1,187 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
-  <title>JioPhone CCTV</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    video { width: 100%; max-height: 240px; background:#000; }
-    textarea { width:100%; height:80px; font-size:12px; }
-    button { width:100%; padding:5px; margin-top:5px; }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JioPhone Feature Check</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#111;margin:6px;padding:6px}
+  h1{font-size:18px;margin:6px 0}
+  .ok{color:green} .no{color:crimson}
+  pre{white-space:pre-wrap;word-break:break-word;background:#f6f8fa;border:1px solid #e1e4e8;padding:8px;border-radius:6px;font-size:12px}
+  button{display:block;width:100%;padding:8px;margin:6px 0;border-radius:6px;border:0;background:#0078d7;color:#fff;font-size:14px}
+  small{color:#666}
+  .row{display:flex;gap:6px}
+  .col{flex:1}
+</style>
 </head>
 <body>
-  <h3>📹 JioPhone CCTV</h3>
-  <video id="local" autoplay muted></video>
-  <video id="remote" autoplay></video>
-  
-  <textarea id="offer"></textarea>
-  <button onclick="createOffer()">Create Offer</button>
-  
-  <textarea id="answer"></textarea>
-  <button onclick="setAnswer()">Set Answer</button>
-  
-  <script>
-    let pc = new RTCPeerConnection();
-    let local = document.getElementById("local");
-    let remote = document.getElementById("remote");
+  <h1>FRIDAY — JioPhone Feature Check</h1>
+  <p><small>Quick diagnostics for KaiOS / JioPhone browser. Results below — use the buttons to try camera or capture fallback.</small></p>
 
-    // Show remote stream
-    pc.ontrack = e => { remote.srcObject = e.streams[0]; };
+  <div id="results"><em>Running tests…</em></div>
 
-    // Capture camera
-    navigator.mediaDevices.getUserMedia({ video: { width:160, height:120, frameRate:10 }, audio:false })
-    .then(stream => {
-      local.srcObject = stream;
-      stream.getTracks().forEach(t => pc.addTrack(t, stream));
-    });
+  <button id="tryCamera">▶️ Try requestCamera (may prompt)</button>
+  <button id="tryCapture">📸 Open file input (capture fallback)</button>
+  <div class="row">
+    <div class="col"><button id="copyBtn">Copy results</button></div>
+    <div class="col"><button id="downloadBtn">Download results .txt</button></div>
+  </div>
 
-    // ICE candidates handling
-    let offerBox = document.getElementById("offer");
-    let answerBox = document.getElementById("answer");
-    pc.onicecandidate = e => {
-      if (e.candidate) {
-        offerBox.value = JSON.stringify(pc.localDescription);
+  <h3>Raw output</h3>
+  <pre id="out" aria-live="polite"></pre>
+
+<script>
+(async function(){
+  const out = [];
+  const o = txt => { out.push(txt); document.getElementById('out').textContent = out.join('\n'); };
+  const resultsDiv = document.getElementById('results');
+
+  // Basic device & environment
+  o('User agent: ' + navigator.userAgent);
+  o('Screen: ' + screen.width + 'x' + screen.height + ' (avail: ' + screen.availWidth + 'x' + screen.availHeight + ')');
+  o('Viewport (inner): ' + window.innerWidth + 'x' + window.innerHeight);
+  o('Secure context (HTTPS): ' + (location.protocol === 'https:' ? 'YES' : 'NO'));
+  o('');
+
+  // Synchronous support checks
+  const checks = [
+    ['navigator.mediaDevices', !!navigator.mediaDevices],
+    ['mediaDevices.getUserMedia', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)],
+    ['RTCPeerConnection', !!window.RTCPeerConnection],
+    ['WebSocket', !!window.WebSocket],
+    ['fetch', !!window.fetch],
+    ['ServiceWorker', !!navigator.serviceWorker],
+    ['IndexedDB', !!window.indexedDB],
+    ['localStorage', !!window.localStorage],
+    ['File & Blob support', (!!window.Blob) + ''],
+    ['FileReader', !!window.FileReader],
+    ['Permissions API', !!navigator.permissions],
+    ['Battery API', !!navigator.getBattery],
+    ['Device Memory (navigator.deviceMemory)', typeof navigator.deviceMemory !== 'undefined' ? navigator.deviceMemory : 'n/a'],
+    ['MediaDevices.enumerateDevices', !!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices)],
+    ['WebRTC DataChannel (RTCDataChannel)', !!window.RTCDataChannel || !!(window.RTCPeerConnection && (RTCPeerConnection.prototype && 'createDataChannel' in RTCPeerConnection.prototype))],
+  ];
+
+  checks.forEach(([name, ok]) => {
+    o((ok ? '✅ ' : '❌ ') + name + ' : ' + String(ok));
+  });
+  o('');
+
+  // Try to get list of devices (non-prompt if enumerateDevices allowed)
+  if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices){
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices();
+      o('Devices enumerated (count ' + list.length + '):');
+      list.forEach((d,i)=> o('  - ['+i+'] kind=' + d.kind + ' label=' + (d.label || '—hidden—') + ' id=' + (d.deviceId || 'n/a')));
+    } catch (err) {
+      o('Could not enumerate devices: ' + err.message);
+    }
+  } else {
+    o('enumerateDevices: not available');
+  }
+
+  // Try Permissions queries (safe, non-prompt)
+  if (navigator.permissions){
+    const toCheck = ['camera','microphone','geolocation','notifications'];
+    for (const name of toCheck){
+      try{
+        // Some browsers reject unknown names — guard it
+        const p = await navigator.permissions.query({name});
+        o('Permission query for ' + name + ': state=' + p.state);
+      } catch(err){
+        o('Permission query for ' + name + ': unsupported (' + err.message + ')');
       }
-    };
-
-    async function createOffer(){
-      let offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      offerBox.value = JSON.stringify(offer);
     }
+  } else {
+    o('Permissions API: not available');
+  }
 
-    async function setAnswer(){
-      let ans = JSON.parse(answerBox.value);
-      await pc.setRemoteDescription(new RTCSessionDescription(ans));
+  // Show helpful next-steps in resultsDiv
+  let advice = [];
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) advice.push('No getUserMedia — camera will not work from hosted web page. Try capture fallback or packaged KaiOS app.');
+  if (!window.RTCPeerConnection) advice.push('No RTCPeerConnection — WebRTC P2P not available.');
+  if (!window.WebSocket) advice.push('No WebSocket — signaling via WebSocket impossible (you can still copy/paste).');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) advice.push('enumerateDevices unavailable — browser hides hardware info.');
+  if (advice.length===0) advice.push('Browser appears to support core APIs. Try "Try requestCamera" to test live access.');
+
+  resultsDiv.innerHTML = '<strong>Quick advice:</strong><ul>' + advice.map(a=>'<li>'+a+'</li>').join('') + '</ul>';
+
+})();
+
+
+// Buttons: try camera
+document.getElementById('tryCamera').addEventListener('click', async function(){
+  const outEl = document.getElementById('out');
+  outEl.textContent += '\n\n--- Attempting getUserMedia (this may prompt) ---\n';
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      outEl.textContent += 'getUserMedia not supported.\n';
+      return;
     }
-  </script>
+    const constraints = { video: { width:160, height:120, frameRate:10 }, audio:false };
+    const s = await navigator.mediaDevices.getUserMedia(constraints);
+    outEl.textContent += 'getUserMedia succeeded — stream obtained. Tracks: ' + s.getTracks().length + '\\n';
+    // show ephemeral video element
+    const v = document.createElement('video');
+    v.style.width='100%';
+    v.autoplay = true; v.muted = true;
+    v.srcObject = s;
+    document.body.insertBefore(v, document.getElementById('tryCamera').nextSibling);
+  } catch(err){
+    outEl.textContent += 'getUserMedia failed: ' + (err && err.message ? err.message : String(err)) + '\\n';
+  }
+});
+
+// file capture fallback
+document.getElementById('tryCapture').addEventListener('click', function(){
+  // create an input element
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.capture = 'camera';
+  inp.style.display = 'block';
+  inp.onchange = function(e){
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const outEl = document.getElementById('out');
+    outEl.textContent += '\\nCapture file chosen: ' + f.name + ' (' + f.type + ', ' + f.size + ' bytes)\\n';
+    // show preview
+    const url = URL.createObjectURL(f);
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.width = '100%';
+    document.body.insertBefore(img, document.getElementById('tryCapture').nextSibling);
+  };
+  // some browsers block programmatic click — attach to DOM then click
+  document.body.appendChild(inp);
+  try { inp.click(); } catch(e){ alert('Unable to auto-open file picker — tap the button then select camera manually.'); }
+});
+
+// copy results
+document.getElementById('copyBtn').addEventListener('click', async function(){
+  const t = document.getElementById('out').textContent;
+  try{
+    await navigator.clipboard.writeText(t);
+    alert('Results copied to clipboard');
+  }catch(e){
+    // fallback: create temporary textarea
+    const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); alert('Results copied (fallback)'); } catch(e2){ alert('Copy failed — please long-press the text to copy.'); }
+    ta.remove();
+  }
+});
+
+// download results
+document.getElementById('downloadBtn').addEventListener('click', function(){
+  const t = document.getElementById('out').textContent;
+  const a = document.createElement('a');
+  const blob = new Blob([t], {type:'text/plain'});
+  a.href = URL.createObjectURL(blob);
+  a.download = 'jio-check-results.txt';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+});
+</script>
 </body>
 </html>
