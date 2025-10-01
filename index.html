@@ -2,33 +2,30 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>JioPhone Feature Test</title>
+  <title>JioPhone Camera Test</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <style>
-    body { font-family: sans-serif; font-size: 14px; }
-    .ok { color: green; }
-    .no { color: red; }
-  </style>
 </head>
 <body>
-  <h2>📱 JioPhone Feature Test</h2>
+  <h2>🎥 Camera Test</h2>
+  <video id="vid" autoplay muted playsinline style="width:100%; background:#000"></video>
+  <p id="status">Starting...</p>
+
   <script>
-    function check(name, test) {
-      document.write("<p>" + name + ": " + 
-        (test ? "<span class='ok'>✔ Supported</span>" : "<span class='no'>✘ Not Supported</span>") + 
-        "</p>");
+    var status = document.getElementById("status");
+    var vid = document.getElementById("vid");
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        .then(function(stream) {
+          vid.srcObject = stream;
+          status.innerHTML = "✅ Camera started successfully!";
+        })
+        .catch(function(err) {
+          status.innerHTML = "❌ getUserMedia failed: " + err.name + " — " + err.message;
+        });
+    } else {
+      status.innerHTML = "❌ getUserMedia not available at all.";
     }
-
-    document.write("<p>UserAgent: " + navigator.userAgent + "</p>");
-
-    check("navigator.mediaDevices", !!navigator.mediaDevices);
-    check("getUserMedia", navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-    check("RTCPeerConnection", window.RTCPeerConnection);
-    check("WebSocket", window.WebSocket);
-    check("fetch API", window.fetch);
-    check("Promise", window.Promise);
-    check("File Input Capture", "capture" in document.createElement("input"));
   </script>
-  <p>End of test.</p>
 </body>
 </html>
