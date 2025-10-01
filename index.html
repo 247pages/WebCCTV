@@ -1,16 +1,52 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Redirecting...</title>
-  <script>
-    window.onload = function() {
-      window.location.href = "https://ofplay.web.app/video.html?v=UBBHpoW3AKA";
-    };
-  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JioPhone QR Scanner</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; }
+    video { width: 100%; max-height: 240px; background: #000; }
+    #output { margin-top: 10px; font-size: 14px; word-break: break-all; }
+  </style>
 </head>
 <body>
-  <p>If you are not redirected, <a href="https://ofplay.web.app/playerc.html?id=DIMXdCXaKJ0csq7rVK7O">click here</a>.</p>
+  <h2>📱 JioPhone QR Scanner</h2>
+  <video id="video" autoplay muted playsinline></video>
+  <div id="output">Scanning...</div>
+  
+  <!-- Include jsQR library -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+  <script>
+    const video = document.getElementById("video");
+    const output = document.getElementById("output");
+
+    // Create canvas for processing
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    // Access camera
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+      .then(stream => { video.srcObject = stream; })
+      .catch(err => { output.innerText = "Camera error: " + err.message; });
+
+    function scanFrame() {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        if (code) {
+          output.innerText = "QR Code detected: " + code.data;
+        } else {
+          output.innerText = "Scanning...";
+        }
+      }
+      requestAnimationFrame(scanFrame);
+    }
+
+    scanFrame();
+  </script>
 </body>
 </html>
